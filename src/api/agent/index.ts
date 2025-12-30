@@ -1,13 +1,12 @@
 import { SystemModelMessage, ToolLoopAgent, stepCountIs } from "ai"
 import dedent from 'dedent'
-import { env } from "cloudflare:workers"
 import { createOpenAI } from "@ai-sdk/openai"
 import { modifyEstimate } from "./modify-estimate-tool"
 
-const openai = createOpenAI({
-  baseURL: env.AI_GATEWAY_BASE_URL,
-  apiKey: env.AI_GATEWAY_API_KEY
-})
+interface Env {
+  AI_GATEWAY_BASE_URL?: string
+  AI_GATEWAY_API_KEY?: string
+}
 
 const INSTRUCTIONS: SystemModelMessage[] = [{
   role: "system",
@@ -40,11 +39,18 @@ const INSTRUCTIONS: SystemModelMessage[] = [{
   `
 }]
 
-export const estimateAgent = new ToolLoopAgent({
-  model: openai.chat("anthropic/claude-haiku-4.5"),
-  instructions: INSTRUCTIONS,
-  tools: {
-    modify_estimate: modifyEstimate,
-  },
-  stopWhen: [stepCountIs(10)]
-})
+export const createEstimateAgent = (env: Env) => {
+  const openai = createOpenAI({
+    baseURL: env.AI_GATEWAY_BASE_URL,
+    apiKey: env.AI_GATEWAY_API_KEY
+  })
+
+  return new ToolLoopAgent({
+    model: openai.chat("anthropic/claude-haiku-4.5"),
+    instructions: INSTRUCTIONS,
+    tools: {
+      modify_estimate: modifyEstimate,
+    },
+    stopWhen: [stepCountIs(10)]
+  })
+}

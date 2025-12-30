@@ -1,10 +1,14 @@
 import { Hono } from "hono"
 import { streamText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
-import { env } from "cloudflare:workers"
 import dedent from "dedent"
 
-export const estimateRoutes = new Hono()
+interface Env {
+  AI_GATEWAY_BASE_URL?: string
+  AI_GATEWAY_API_KEY?: string
+}
+
+export const estimateRoutes = new Hono<{ Bindings: Env }>()
 
 const CONTRACTOR_SYSTEM_PROMPT = dedent`
 You are an expert residential and commercial contractor with 25+ years of experience in home inspections, renovations, and new construction. You have deep knowledge of:
@@ -156,19 +160,32 @@ estimateRoutes.post("/generate", async (c) => {
     return c.json({ error: "Address is required" }, 400)
   }
 
+  // Get environment variables from Hono context (works in both dev and production)
+  const env = c.env || {}
+  const baseURL = env.AI_GATEWAY_BASE_URL
+  const apiKey = env.AI_GATEWAY_API_KEY
+
+  // Log what we're working with (without exposing full key)
+  console.log("AI Gateway configuration check:", {
+    hasBaseURL: !!baseURL,
+    hasApiKey: !!apiKey,
+    baseURL: baseURL ? baseURL.substring(0, 30) + "..." : "not set",
+    apiKeyPrefix: apiKey ? apiKey.substring(0, 8) + "..." : "not set"
+  })
+
   // Check for AI configuration
-  if (!env.AI_GATEWAY_BASE_URL || !env.AI_GATEWAY_API_KEY) {
+  if (!baseURL || !apiKey) {
     console.error("AI Gateway not configured - missing AI_GATEWAY_BASE_URL or AI_GATEWAY_API_KEY")
     return c.json({ 
       error: "AI service not configured",
-      details: "The AI estimation service is not set up. Please contact the administrator to configure AI_GATEWAY_BASE_URL and AI_GATEWAY_API_KEY environment variables.",
+      details: "The AI estimation service is not set up. You can still use the manual calculators to create estimates. To enable AI estimates, configure the AI_GATEWAY_BASE_URL and AI_GATEWAY_API_KEY environment variables.",
       code: "AI_NOT_CONFIGURED"
     }, 503)
   }
 
   const openai = createOpenAI({
-    baseURL: env.AI_GATEWAY_BASE_URL,
-    apiKey: env.AI_GATEWAY_API_KEY
+    baseURL: baseURL,
+    apiKey: apiKey
   })
 
   // Build context from settings if provided

@@ -48,15 +48,17 @@ const categoryTypes: { type: CategoryType; label: string }[] = [
 
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
+  const isNewProject = params.id === 'new';
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
+  // New projects start in editing mode by default
+  const [editing, setEditing] = useState(isNewProject);
 
   useEffect(() => {
     const projects = getProjects();
     const found = projects.find(p => p.id === params.id);
     
-    if (params.id === 'new') {
+    if (isNewProject) {
       const newProject: Project = {
         id: generateId(),
         clientId: '',
@@ -77,7 +79,7 @@ export default function ProjectDetail() {
       setProject(found);
     }
     setLoading(false);
-  }, [params.id]);
+  }, [params.id, isNewProject]);
 
   const handleSave = () => {
     if (!project) return;
