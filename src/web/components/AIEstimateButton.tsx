@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Loader2, CheckCircle } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProjectCategory, CalculatorResult, PropertyData, CategoryType } from '@/lib/types';
 import { getSettings } from '@/lib/storage';
@@ -79,6 +79,8 @@ export function AIEstimateButton({ address, propertyData, onEstimateGenerated }:
       const settings = getSettings();
       const aiSettings = settings?.aiSettings;
 
+      console.log('[AI Estimate] Starting generation for address:', address);
+
       const response = await fetch('/api/estimate/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,8 +91,30 @@ export function AIEstimateButton({ address, propertyData, onEstimateGenerated }:
         }),
       });
 
+      console.log('[AI Estimate] Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to generate estimate');
+        // Try to get detailed error from response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          console.error('[AI Estimate] Error response:', errorData);
+          
+          // Provide user-friendly error messages based on error code
+          switch (errorData.code) {
+            case 'AI_NOT_CONFIGURED':
+              throw new Error('AI service is not configured. You can still use the manual calculators to build your estimate.');
+            case 'INVALID_CREDENTIALS':
+              throw new Error('AI service credentials are invalid. Please contact support or use manual calculators.');
+            case 'RATE_LIMITED':
+              throw new Error('Too many requests. Please wait a moment and try again.');
+            case 'TIMEOUT':
+              throw new Error('Request timed out. Please try again.');
+            default:
+              throw new Error(errorData.details || errorData.error || 'Failed to generate estimate');
+          }
+        }
+        throw new Error(`Request failed with status ${response.status}. Please try again or use manual calculators.`);
       }
 
       // Read the stream
@@ -106,13 +130,23 @@ export function AIEstimateButton({ address, propertyData, onEstimateGenerated }:
         fullText += decoder.decode(value, { stream: true });
       }
 
+      console.log('[AI Estimate] Full response text length:', fullText.length);
+
       // Parse the JSON response
       const jsonMatch = fullText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid response format');
+        console.error('[AI Estimate] No JSON found in response:', fullText.substring(0, 500));
+        throw new Error('Invalid response format from AI. Please try again.');
       }
 
-      const result: AIEstimateResult = JSON.parse(jsonMatch[0]);
+      let result: AIEstimateResult;
+      try {
+        result = JSON.parse(jsonMatch[0]);
+        console.log('[AI Estimate] Parsed result with', result.categories?.length || 0, 'categories');
+      } catch (parseError) {
+        console.error('[AI Estimate] JSON parse error:', parseError);
+        throw new Error('Failed to parse AI response. Please try again.');
+      }
 
       // Convert AI result to ProjectCategory format
       const categories: ProjectCategory[] = result.categories.map(cat => ({
@@ -200,7 +234,31 @@ export function AIEstimateButton({ address, propertyData, onEstimateGenerated }:
           )}
         </Button>
         {error && (
-          <p className="text-sm text-red-400">{error}</p>
+          <div className="flex flex-col gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg max-w-md">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={generateEstimate}
+                size="sm"
+                variant="outline"
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Try Again
+              </Button>
+              <Button
+                onClick={() => setError(null)}
+                size="sm"
+                variant="ghost"
+                className="text-slate-400 hover:text-slate-300"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 

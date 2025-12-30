@@ -156,6 +156,16 @@ estimateRoutes.post("/generate", async (c) => {
     return c.json({ error: "Address is required" }, 400)
   }
 
+  // Check for AI configuration
+  if (!env.AI_GATEWAY_BASE_URL || !env.AI_GATEWAY_API_KEY) {
+    console.error("AI Gateway not configured - missing AI_GATEWAY_BASE_URL or AI_GATEWAY_API_KEY")
+    return c.json({ 
+      error: "AI service not configured",
+      details: "The AI estimation service is not set up. Please contact the administrator to configure AI_GATEWAY_BASE_URL and AI_GATEWAY_API_KEY environment variables.",
+      code: "AI_NOT_CONFIGURED"
+    }, 503)
+  }
+
   const openai = createOpenAI({
     baseURL: env.AI_GATEWAY_BASE_URL,
     apiKey: env.AI_GATEWAY_API_KEY
@@ -209,6 +219,38 @@ estimateRoutes.post("/generate", async (c) => {
     return result.toTextStreamResponse()
   } catch (error) {
     console.error("AI estimation error:", error)
-    return c.json({ error: "Failed to generate estimate" }, 500)
+    
+    // Provide more specific error messages
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    
+    if (errorMessage.includes("401") || errorMessage.includes("unauthorized") || errorMessage.includes("Unauthorized")) {
+      return c.json({ 
+        error: "Invalid API credentials",
+        details: "The AI service credentials are invalid or expired. Please check your API key configuration.",
+        code: "INVALID_CREDENTIALS"
+      }, 401)
+    }
+    
+    if (errorMessage.includes("429") || errorMessage.includes("rate limit")) {
+      return c.json({ 
+        error: "Rate limit exceeded",
+        details: "Too many requests. Please wait a moment and try again.",
+        code: "RATE_LIMITED"
+      }, 429)
+    }
+    
+    if (errorMessage.includes("timeout") || errorMessage.includes("ETIMEDOUT")) {
+      return c.json({ 
+        error: "Request timeout",
+        details: "The AI service took too long to respond. Please try again.",
+        code: "TIMEOUT"
+      }, 504)
+    }
+    
+    return c.json({ 
+      error: "Failed to generate estimate",
+      details: errorMessage,
+      code: "AI_ERROR"
+    }, 500)
   }
 })
