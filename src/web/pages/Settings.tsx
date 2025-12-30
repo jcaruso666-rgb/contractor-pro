@@ -11,7 +11,8 @@ import {
   Plus,
   Edit2,
   X,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,7 +31,10 @@ import {
   exportAllData,
   importAllData,
   generateId,
-  CompanyInfo
+  getSettings,
+  saveSettings,
+  CompanyInfo,
+  AppSettings
 } from '@/lib/storage';
 import { PricingData, DEFAULT_PRICING, Client } from '@/lib/types';
 
@@ -38,6 +42,7 @@ export default function Settings() {
   const [pricing, setPricing] = useState<PricingData>(getPricing());
   const [clients, setClients] = useState<Client[]>(getClients());
   const [company, setCompany] = useState<CompanyInfo>(getCompanyInfo());
+  const [settings, setSettings] = useState<AppSettings>(getSettings());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showNewClient, setShowNewClient] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +65,22 @@ export default function Settings() {
     saveCompanyInfo(company);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSaveSettings = () => {
+    saveSettings(settings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const updateAISettings = (field: keyof AppSettings['aiSettings'], value: string | boolean) => {
+    setSettings({
+      ...settings,
+      aiSettings: {
+        ...settings.aiSettings,
+        [field]: value
+      }
+    });
   };
 
   const handleExport = () => {
@@ -165,6 +186,10 @@ export default function Settings() {
             <TabsTrigger value="company" className="gap-2 data-[state=active]:bg-sky-500 data-[state=active]:text-white">
               <Building2 className="w-4 h-4" />
               Company
+            </TabsTrigger>
+            <TabsTrigger value="ai" className="gap-2 data-[state=active]:bg-violet-500 data-[state=active]:text-white">
+              <Sparkles className="w-4 h-4" />
+              AI Settings
             </TabsTrigger>
           </TabsList>
 
@@ -657,6 +682,138 @@ export default function Settings() {
                 </p>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* AI Settings Tab */}
+          <TabsContent value="ai">
+            <div className="space-y-6">
+              <Card className="bg-gradient-to-br from-slate-800/50 to-violet-900/20 border-violet-500/30">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-violet-500/20">
+                      <Sparkles className="w-5 h-5 text-violet-400" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-white">AI Estimation Settings</CardTitle>
+                      <p className="text-sm text-slate-400 mt-1">Configure how AI generates property estimates</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleSaveSettings}
+                    className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saved ? 'Saved!' : 'Save Settings'}
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Enable/Disable AI */}
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                    <div>
+                      <h3 className="font-medium text-white">Enable AI Estimation</h3>
+                      <p className="text-sm text-slate-400">Show the AI estimate button on project pages</p>
+                    </div>
+                    <button
+                      onClick={() => updateAISettings('enabled', !settings.aiSettings.enabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        settings.aiSettings.enabled ? 'bg-violet-600' : 'bg-slate-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          settings.aiSettings.enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Estimation Style */}
+                  <div>
+                    <Label className="text-slate-300 text-base font-medium">Estimation Style</Label>
+                    <p className="text-sm text-slate-400 mb-3">Controls how much work the AI suggests</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(['Conservative', 'Standard', 'Comprehensive'] as const).map(style => (
+                        <button
+                          key={style}
+                          onClick={() => updateAISettings('estimationStyle', style)}
+                          className={`p-4 rounded-lg border transition-all ${
+                            settings.aiSettings.estimationStyle === style
+                              ? 'border-violet-500 bg-violet-500/20 text-white'
+                              : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-600'
+                          }`}
+                        >
+                          <div className="font-medium">{style}</div>
+                          <div className="text-xs mt-1 opacity-70">
+                            {style === 'Conservative' && 'Only essential work'}
+                            {style === 'Standard' && 'Balanced approach'}
+                            {style === 'Comprehensive' && 'Include preventive work'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Local Market Settings */}
+                  <div className="border-t border-slate-700 pt-6">
+                    <h3 className="text-lg font-medium text-white mb-4">Local Market Customization</h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                      Help the AI give more accurate estimates for your area. These notes are included in AI prompts.
+                    </p>
+                    
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-slate-400">Typical Home Age in Your Area</Label>
+                        <Input
+                          value={settings.aiSettings.typicalHomeAge}
+                          onChange={(e) => updateAISettings('typicalHomeAge', e.target.value)}
+                          placeholder="e.g., Most homes built 1960-1980"
+                          className="mt-1 bg-slate-900 border-slate-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400">Common Building Materials</Label>
+                        <Input
+                          value={settings.aiSettings.commonMaterials}
+                          onChange={(e) => updateAISettings('commonMaterials', e.target.value)}
+                          placeholder="e.g., Brick construction, asphalt shingles"
+                          className="mt-1 bg-slate-900 border-slate-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400">Climate Considerations</Label>
+                        <Input
+                          value={settings.aiSettings.climateNotes}
+                          onChange={(e) => updateAISettings('climateNotes', e.target.value)}
+                          placeholder="e.g., Heavy snow, high humidity, salt air"
+                          className="mt-1 bg-slate-900 border-slate-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400">Market Notes</Label>
+                        <Input
+                          value={settings.aiSettings.marketNotes}
+                          onChange={(e) => updateAISettings('marketNotes', e.target.value)}
+                          placeholder="e.g., High-end neighborhood, budget-conscious area"
+                          className="mt-1 bg-slate-900 border-slate-700 text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="p-4 bg-violet-500/10 border border-violet-500/30 rounded-lg">
+                    <h4 className="font-medium text-violet-300 mb-2">How AI Estimation Works</h4>
+                    <ul className="text-sm text-slate-400 space-y-1">
+                      <li>• The AI analyzes the property address to determine location and typical home styles</li>
+                      <li>• It estimates property age, size, and likely maintenance needs</li>
+                      <li>• Estimates include materials, labor, and current 2024 pricing</li>
+                      <li>• Your local market settings help refine accuracy for your area</li>
+                      <li>• All AI suggestions should be verified with on-site inspection</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

@@ -23,8 +23,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Layout } from '@/components/Layout';
 import { AddressInput } from '@/components/AddressInput';
 import { BiddingSuggestions } from '@/components/BiddingSuggestions';
-import { getProjects, saveProject, generateId } from '@/lib/storage';
-import { Project, PropertyData, ProjectCategory, CategoryType } from '@/lib/types';
+import { AIEstimateButton } from '@/components/AIEstimateButton';
+import { AIChat } from '@/components/AIChat';
+import { getProjects, saveProject, generateId, getSettings } from '@/lib/storage';
+import { Project, PropertyData, ProjectCategory, CategoryType, CalculatorResult } from '@/lib/types';
 
 const statusOptions = [
   { value: 'quote', label: 'Quote', color: 'bg-amber-500' },
@@ -140,6 +142,153 @@ export default function ProjectDetail() {
     });
   };
 
+  const handleAIEstimate = (categories: ProjectCategory[], propertyAnalysis?: { estimatedAge: number; estimatedSqFt: number; estimatedRoofArea: number; estimatedPerimeter: number; propertyType: string; notes: string }) => {
+    if (!project) return;
+    
+    // Calculate totals
+    const subtotal = categories.reduce((sum, cat) => sum + cat.subtotal, 0);
+    const tax = subtotal * 0.08;
+    
+    // Update property data if we got analysis
+    let updatedPropertyData = project.propertyData;
+    if (propertyAnalysis) {
+      updatedPropertyData = {
+        ...project.propertyData,
+        address: project.propertyAddress,
+        lat: project.propertyData?.lat || 0,
+        lng: project.propertyData?.lng || 0,
+        buildingArea: propertyAnalysis.estimatedSqFt,
+        roofArea: propertyAnalysis.estimatedRoofArea,
+        perimeter: propertyAnalysis.estimatedPerimeter,
+        yearBuilt: new Date().getFullYear() - propertyAnalysis.estimatedAge,
+      };
+    }
+    
+    setProject({
+      ...project,
+      categories,
+      subtotal,
+      tax,
+      total: subtotal + tax,
+      propertyData: updatedPropertyData,
+      notes: propertyAnalysis?.notes 
+        ? `AI Analysis: ${propertyAnalysis.notes}\n\n${project.notes}` 
+        : project.notes,
+    });
+  };
+
+  const handleChatModification = (modification: {
+    action: string;
+    category: CategoryType;
+    itemIndex?: number;
+    item?: {
+      description: string;
+      quantity: number;
+      unit: string;
+      unitPrice: number;
+      laborHours: number;
+      laborRate: number;
+    };
+    reason: string;
+  }) => {
+    if (!project) return;
+    
+    let updatedCategories = [...project.categories];
+    
+    switch (modification.action) {
+      case 'add_category': {
+        if (!updatedCategories.find(c => c.type === modification.category)) {
+          updatedCategories.push({
+            type: modification.category,
+            items: [],
+            subtotal: 0,
+          });
+        }
+        break;
+      }
+      
+      case 'remove_category': {
+        updatedCategories = updatedCategories.filter(c => c.type !== modification.category);
+        break;
+      }
+      
+      case 'add_item': {
+        if (modification.item) {
+          const catIndex = updatedCategories.findIndex(c => c.type === modification.category);
+          if (catIndex === -1) {
+            // Create category first
+            updatedCategories.push({
+              type: modification.category,
+              items: [],
+              subtotal: 0,
+            });
+          }
+          const cat = updatedCategories.find(c => c.type === modification.category)!;
+          const materialCost = modification.item.quantity * modification.item.unitPrice;
+          const laborCost = modification.item.laborHours * modification.item.laborRate;
+          const newItem: CalculatorResult = {
+            description: modification.item.description,
+            quantity: modification.item.quantity,
+            unit: modification.item.unit,
+            unitPrice: modification.item.unitPrice,
+            total: materialCost + laborCost,
+            laborHours: modification.item.laborHours,
+            laborRate: modification.item.laborRate,
+            laborCost: laborCost,
+          };
+          cat.items.push(newItem);
+          cat.subtotal = cat.items.reduce((sum, i) => sum + i.total, 0);
+        }
+        break;
+      }
+      
+      case 'remove_item': {
+        if (typeof modification.itemIndex === 'number') {
+          const cat = updatedCategories.find(c => c.type === modification.category);
+          if (cat && cat.items[modification.itemIndex]) {
+            cat.items.splice(modification.itemIndex, 1);
+            cat.subtotal = cat.items.reduce((sum, i) => sum + i.total, 0);
+          }
+        }
+        break;
+      }
+      
+      case 'update_item': {
+        if (typeof modification.itemIndex === 'number' && modification.item) {
+          const cat = updatedCategories.find(c => c.type === modification.category);
+          if (cat && cat.items[modification.itemIndex]) {
+            const materialCost = modification.item.quantity * modification.item.unitPrice;
+            const laborCost = modification.item.laborHours * modification.item.laborRate;
+            cat.items[modification.itemIndex] = {
+              description: modification.item.description,
+              quantity: modification.item.quantity,
+              unit: modification.item.unit,
+              unitPrice: modification.item.unitPrice,
+              total: materialCost + laborCost,
+              laborHours: modification.item.laborHours,
+              laborRate: modification.item.laborRate,
+              laborCost: laborCost,
+            };
+            cat.subtotal = cat.items.reduce((sum, i) => sum + i.total, 0);
+          }
+        }
+        break;
+      }
+    }
+    
+    // Recalculate totals
+    const subtotal = updatedCategories.reduce((sum, cat) => sum + cat.subtotal, 0);
+    const tax = subtotal * 0.08;
+    
+    setProject({
+      ...project,
+      categories: updatedCategories,
+      subtotal,
+      tax,
+      total: subtotal + tax,
+    });
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -223,11 +372,29 @@ export default function ProjectDetail() {
                   Property Information
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <AddressInput 
                   onPropertyData={handlePropertyData}
                   initialAddress={project.propertyAddress}
                 />
+                
+                {/* AI Estimate Button - Prominent placement next to address input */}
+                {getSettings().aiSettings.enabled && (
+                  <div className="pt-2 border-t border-slate-700">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-slate-400">
+                          Generate a complete estimate using AI analysis
+                        </p>
+                      </div>
+                      <AIEstimateButton
+                        address={project.propertyAddress}
+                        propertyData={project.propertyData}
+                        onEstimateGenerated={handleAIEstimate}
+                      />
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -445,6 +612,14 @@ export default function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* AI Chat - floating button with chat panel */}
+      {getSettings().aiSettings.enabled && (
+        <AIChat 
+          project={project} 
+          onModifyEstimate={handleChatModification} 
+        />
+      )}
     </Layout>
   );
 }

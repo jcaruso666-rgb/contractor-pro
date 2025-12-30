@@ -42,6 +42,9 @@ export interface ProjectCategory {
   type: CategoryType;
   items: CalculatorResult[];
   subtotal: number;
+  // AI-generated fields
+  confidence?: 'high' | 'medium' | 'low';
+  reasoning?: string;
 }
 
 export type CategoryType = 

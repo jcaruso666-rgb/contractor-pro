@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   PROJECTS: 'contractor_projects',
   PRICING: 'contractor_pricing',
   COMPANY: 'contractor_company',
+  SETTINGS: 'contractor_settings',
 } as const;
 
 export interface CompanyInfo {
@@ -104,6 +105,38 @@ export const importAllData = (jsonString: string) => {
   if (data.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(data.projects));
   if (data.pricing) localStorage.setItem(STORAGE_KEYS.PRICING, JSON.stringify(data.pricing));
   if (data.company) localStorage.setItem(STORAGE_KEYS.COMPANY, JSON.stringify(data.company));
+};
+
+// Settings
+export interface AISettings {
+  enabled: boolean;
+  estimationStyle: 'Conservative' | 'Standard' | 'Comprehensive';
+  typicalHomeAge: string;
+  commonMaterials: string;
+  climateNotes: string;
+  marketNotes: string;
+}
+
+export interface AppSettings {
+  aiSettings: AISettings;
+}
+
+export const getSettings = (): AppSettings => {
+  const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+  return data ? JSON.parse(data) : {
+    aiSettings: {
+      enabled: true,
+      estimationStyle: 'Standard',
+      typicalHomeAge: '',
+      commonMaterials: '',
+      climateNotes: '',
+      marketNotes: '',
+    },
+  };
+};
+
+export const saveSettings = (settings: AppSettings) => {
+  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
 };
 
 // Generate unique ID
