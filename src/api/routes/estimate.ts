@@ -228,7 +228,7 @@ estimateRoutes.post("/generate", async (c) => {
 
   try {
     const result = await streamText({
-      model: openai.chat("anthropic/claude-haiku-4.5"),
+      model: openai.chat("gpt-4o-mini"),
       system: CONTRACTOR_SYSTEM_PROMPT,
       prompt: userPrompt,
     })
