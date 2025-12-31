@@ -46,7 +46,7 @@ export const createEstimateAgent = (env: Env) => {
   })
 
   return new ToolLoopAgent({
-    model: openai.chat("anthropic/claude-haiku-4.5"),
+    model: openai.chat("gpt-4o-mini"),
     instructions: INSTRUCTIONS,
     tools: {
       modify_estimate: modifyEstimate,
